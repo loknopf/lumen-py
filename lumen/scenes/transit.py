@@ -44,15 +44,23 @@ class TransitScene(Scene):
         font = get_font("5x8")
         for i, d in enumerate(deps[:3]):
             y = 1 + i * 10
+            # Dim separator above rows 2 and 3.
+            if i > 0:
+                c.hline(0, y - 1, c.width, (22, 22, 22))
             # Line badge: colored chip with the line code knocked out in black.
             label = d.line
             w = font.text_width(label) + 2
             c.rect(0, y, w, 9, d.color, fill=True)
             c.text(1, y + 1, label, (0, 0, 0), font="5x8")
-            # Minutes, right-aligned — drawn first so we know where it starts.
+            # Minutes with urgency coloring: red ≤3, yellow ≤7, plain otherwise.
             mins = f"{d.minutes}'"
+            min_color = (
+                (255, 60, 60) if d.minutes <= 3 else
+                (255, 200, 50) if d.minutes <= 7 else
+                (210, 210, 210)
+            )
             min_x = 63 - font.text_width(mins)
-            c.text(min_x, y + 1, mins, (255, 255, 255), font="5x8")
+            c.text(min_x, y + 1, mins, min_color, font="5x8")
             # Destination, clipped to the pixels between badge and minutes.
             dest_x = w + 2
             avail = (min_x - 2) - dest_x

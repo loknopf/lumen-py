@@ -27,11 +27,16 @@ class IdleScene(Scene):
     def draw(self, ctx: RenderContext) -> Canvas:
         now: datetime = ctx.now
         c = Canvas()
-        # Soft ambient gradient strip across the top.
+        # Richer 5px gradient strip: deep teal on left → purple on right.
         for x in range(c.width):
             t = x / (c.width - 1)
-            c.vline(x, 0, 3, (int(20 + 60 * t), int(10 + 20 * t), int(60 - 40 * t)))
+            c.vline(x, 0, 5, (int(10 + 70 * t), int(5 + 20 * t), int(85 - 35 * t)))
+        # Mirror glow at the very bottom.
+        for x in range(c.width):
+            t = x / (c.width - 1)
+            c.pixel(x, 31, (int(6 + 25 * t), int(3 + 7 * t), int(32 - 12 * t)))
 
-        c.text_centered(8, DOW[now.weekday()], (120, 140, 220), font="5x8")
-        c.text_centered(18, f"{now.day:02d} {MON[now.month - 1]}", (220, 220, 220), font="6x13")
+        c.text_centered(6, DOW[now.weekday()], (140, 160, 250), font="5x8")
+        c.hline(18, 16, 28, (35, 42, 85))  # thin separator between DOW and date
+        c.text_centered(18, f"{now.day:02d} {MON[now.month - 1]}", (235, 235, 250), font="6x13")
         return c

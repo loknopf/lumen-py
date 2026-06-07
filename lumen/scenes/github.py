@@ -43,14 +43,21 @@ class GithubScene(Scene):
         c.text(1, 9, f"{g.today}", (255, 255, 255), font="6x13")
         c.text(1 + 14, 14, "TODAY", (120, 120, 120), font="4x6")
 
-        # Streak, top-right.
+        # Streak and 7D label, top-right.
         c.text_right(63, 1, f"{g.streak}d", GH_GREEN, font="4x6")
+        c.text_right(63, 17, "7D", (45, 85, 45), font="4x6")
 
-        # Last-7-days bar chart along the bottom.
+        # Green divider separating the stats area from the bar chart.
+        c.hline(0, 23, c.width, (28, 58, 28))
+
+        # Last-7-days bar chart with bottom-to-top brightness gradient.
         peak = max(g.week) or 1
         base_y = 31
         for i, v in enumerate(g.week):
-            h = max(1, round(6 * v / peak))
+            h = max(1, round(7 * v / peak))
             x = 1 + i * 4
-            c.rect(x, base_y - h, 3, h, GH_GREEN, fill=True)
+            for dy in range(h):
+                t = dy / max(h - 1, 1)
+                br = int(70 + 140 * t)
+                c.hline(x, base_y - dy, 3, (int(br * 0.27), br, int(br * 0.39)))
         return c
