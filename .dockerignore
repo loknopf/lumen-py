@@ -1,0 +1,11 @@
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+tests/
+tools/
+design/
+dist/
+*.egg-info/
+config.toml
