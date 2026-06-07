@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Local config and bring-up artifacts
+config.toml
+*.bin
+# Golden references are committed; their transient actuals are not.
+tests/golden/*.actual.png
+
+# Frame dumps from tools/dump_frame.py at repo root
+/weather.png
+/transit.png
+/github.png
+/countdown.png
+/idle.png

@@ -1,0 +1,35 @@
+[project]
+name = "lumen-py"
+version = "0.1.0"
+description = "Server-driven ambient display backend for the Adafruit Matrix Portal M4"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pillow>=10.0",
+    "numpy>=1.26",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+lumen-server = "lumen.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lumen"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"lumen/assets" = "lumen/assets"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

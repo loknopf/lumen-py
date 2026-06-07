@@ -1,0 +1,38 @@
+# lumen-py configuration. Copy to config.toml and edit.
+# Everything here has a sensible default; an empty/absent file still runs.
+
+# Ordered scene rotation the stage manager cycles through.
+rotation = ["weather", "transit", "github", "countdown", "idle"]
+
+# Optional per-scene duration overrides (seconds). Omitted -> scene default.
+[durations]
+transit = 10
+weather = 8
+
+# Optional per-scene transition overrides (slide / fade / wipe / dissolve).
+[transitions]
+weather = "fade"
+
+# Informational; the M4 owns sleep. Mirrors the design's active window.
+[active_hours]
+start = "07:00"
+end = "00:00"
+
+# --- Per-scene settings (read via config.scene_config(id)) -----------------
+# These feed the STUBbed fetch() methods today; wire real APIs there.
+
+[scenes.weather]
+location = "Frankfurt"
+# demo_* values are only used by the stub renderer:
+demo_temp = 18
+demo_condition = "clear"   # clear | clouds | rain | snow
+
+[scenes.transit]
+stop_id = "3000010"        # RMV stop id
+
+[scenes.github]
+username = "loknopf"
+
+[scenes.countdown]
+target = "2026-08-15"
+label = "PORTO"
