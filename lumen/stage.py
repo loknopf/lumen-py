@@ -19,7 +19,7 @@ from .registry import SCENES
 
 
 @dataclass
-class NextScene:
+class Scene:
     id: str
     duration: int
     transition: str | None = None
@@ -43,13 +43,13 @@ class StageManager:
         self._priority.append(scene_id)
         return True
 
-    def _describe(self, scene_id: str) -> NextScene:
+    def _describe(self, scene_id: str) -> Scene:
         scene = SCENES[scene_id]
         duration = self.config.durations.get(scene_id, scene.default_duration)
         transition = self.config.transitions.get(scene_id, scene.transition)
-        return NextScene(id=scene_id, duration=duration, transition=transition)
+        return Scene(id=scene_id, duration=duration, transition=transition)
 
-    def next(self) -> NextScene:
+    def next(self) -> Scene:
         if self._priority:
             return self._describe(self._priority.popleft())
 
@@ -57,8 +57,18 @@ class StageManager:
         if not rotation:
             # Nothing configured/registered — fall back to any scene, else idle.
             fallback = next(iter(SCENES), "idle")
-            return self._describe(fallback) if fallback in SCENES else NextScene("idle", 8)
+            return self._describe(fallback) if fallback in SCENES else Scene("idle", 8)
 
         scene_id = rotation[self._index % len(rotation)]
         self._index = (self._index + 1) % len(rotation)
+        return self._describe(scene_id)
+
+    def current(self) -> Scene:
+        if self._priority:
+            return self._describe(self._priority[0])
+        rotation = self._rotation()
+        if not rotation:
+            fallback = next(iter(SCENES), "idle")
+            return self._describe(fallback) if fallback in SCENES else Scene("idle", 8)
+        scene_id = rotation[self._index % len(rotation)]
         return self._describe(scene_id)

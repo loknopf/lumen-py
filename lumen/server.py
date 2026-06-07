@@ -40,6 +40,15 @@ def next_scene() -> dict:
     return body
 
 
+@app.get("/current")
+def current_scene() -> dict:
+    cur = stage.current()
+    body = {"id": cur.id, "duration": cur.duration}
+    if cur.transition:
+        body["transition"] = cur.transition
+    return body
+
+
 @app.get("/frame/{scene_id}")
 def frame(scene_id: str) -> Response:
     data = renderer.frame(scene_id)
