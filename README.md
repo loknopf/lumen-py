@@ -88,8 +88,23 @@ pytest                 # unit + golden tests
 
 Copy `config.example.toml` to `config.toml` (or point `LUMEN_CONFIG` at a file).
 Everything has a default, so it also runs with no config. Per-scene API settings
-live under `[scenes.<id>]`; the scene `fetch()` methods currently return stub data
-and are marked where to wire real APIs (weather, RMV transit, GitHub).
+live under `[scenes.<id>]`.
+
+The transit scene fetches live departures from the RMV OpenData API (HAFAS
+`departureBoard`) once station ids plus an access id (`api_key` in config or
+the `RMV_API_KEY` env var) are set — either a single `stop_id` or several
+stations via `stops`, with optional line filters (`lines = ["U4", "U16"]`)
+and direction filters (`direction = "<stop id>"`, only journeys heading
+toward that stop), each settable globally or per station. `mode = "compact"`
+switches the display from 3 rows with destination text to 4 destination-less
+rows with scheduled time and live delay. The github scene
+queries the GitHub GraphQL
+contributions calendar once `username` plus a token (`token` in config or the
+`GITHUB_TOKEN` env var) are set. The weather scene fetches current conditions
+from Open-Meteo (no key needed) once a `location` name or
+`latitude`/`longitude` are set. Credentials can also live in a local `.env`
+file. Without credentials, scenes fall back to built-in demo data (offline
+runs, golden tests).
 
 ## Layout
 
@@ -105,6 +120,7 @@ lumen/
   config.py          TOML config (pydantic)
   server.py          FastAPI app + /preview
   scenes/            one module per scene
+  sources/           API access layer (GitHub GraphQL, RMV HAFAS, Open-Meteo)
   assets/fonts/      vendored public-domain BDF fonts
 tests/               unit + golden tests
 tools/               update_golden, dump_frame

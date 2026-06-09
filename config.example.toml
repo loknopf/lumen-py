@@ -19,20 +19,36 @@ start = "07:00"
 end = "00:00"
 
 # --- Per-scene settings (read via config.scene_config(id)) -----------------
-# These feed the STUBbed fetch() methods today; wire real APIs there.
+# Scenes with credentials configured fetch live data; without them they fall
+# back to built-in demo data (offline runs, golden tests).
 
 [scenes.weather]
-location = "Frankfurt"
-# demo_* values are only used by the stub renderer:
+location = "Munich"        # geocoded once via Open-Meteo (no API key needed)
+# latitude = 50.11         # set coordinates directly to skip geocoding
+# longitude = 8.68
+# demo_* values are only used when neither location nor coordinates are set:
 demo_temp = 18
 demo_condition = "clear"   # clear | clouds | rain | snow
 
 [scenes.transit]
-stop_id = "3000010"        # RMV stop id
+stops = [{ id = "3029004", direction = "3025307" }, { id = "3029209", lines = ["51"]}]
+lines = [56, 58]
+# stop_id = "3029004"        # RMV stop id (extId for the departureBoard service)
+# ...or track several stations (strings, or tables with per-station filter):
+# stops = ["3029004", { id = "3000011", lines = ["U4", "U16"], direction = "3001234" }]
+# lines = ["S6", "U16"]    # line filter for stations without their own
+# direction = "3001234"    # only journeys toward this stop id (terminus or any
+#                          # later stop on the line); per-station key overrides
+mode = "compact"         # "full" (default): 3 rows with destination text;
+#                          # "compact": 4 rows with scheduled time + delay instead
+# api_key = "..."          # RMV accessId; or set the RMV_API_KEY env var
+# base_url = "https://www.rmv.de/hapi"   # HAFAS ReST base URL (default shown)
+# duration = 60            # departureBoard look-ahead window in minutes
 
 [scenes.github]
 username = "loknopf"
+# token = "ghp_..."        # GitHub token (no scopes needed); or set GITHUB_TOKEN
 
 [scenes.countdown]
 target = "2026-08-15"
-label = "PORTO"
+label = "GOAL"

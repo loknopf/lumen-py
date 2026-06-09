@@ -1,9 +1,10 @@
 """Weather scene — current conditions + temperature.
 
-Real data source (per design): a weather API. The ``fetch`` below is a clearly
-marked STUB returning static demo data so the pipeline runs offline. To go live,
-replace the body of ``fetch`` with an HTTP call (e.g. Open-Meteo, no key needed)
-and map the response into ``WeatherData``. Nothing else changes.
+Data source: the Open-Meteo API (no key needed), see ``lumen.sources.weather``.
+Goes live when the config provides ``latitude``/``longitude`` or a ``location``
+name (geocoded once via Open-Meteo); without either, ``fetch`` returns the
+``demo_*`` values so the pipeline runs offline and golden tests stay
+deterministic.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from ..canvas import Canvas
 from ..fonts import Color
 from ..registry import register
 from ..scene import RenderContext, Scene
+from ..sources import weather as weather_api
 from ._icons import weather_icon
 
 _SKY: dict[str, Color] = {
@@ -57,12 +59,24 @@ class WeatherScene(Scene):
 
     def fetch(self, ctx: RenderContext) -> WeatherData:
         cfg = ctx.config.scene_config(self.id)
-        # --- STUB: swap for a real API call keyed on cfg["location"] ---------
+        lat, lon = cfg.get("latitude"), cfg.get("longitude")
+        if lat is None or lon is None:
+            location = cfg.get("location")
+            if not location:
+                # Demo data: keeps offline runs and golden tests working.
+                return WeatherData(
+                    temp_c=cfg.get("demo_temp", 18),
+                    high_c=cfg.get("demo_high", 21),
+                    low_c=cfg.get("demo_low", 11),
+                    condition=cfg.get("demo_condition", "clear"),
+                )
+            lat, lon = weather_api.geocode(location)
+        report = weather_api.fetch_weather(lat, lon)
         return WeatherData(
-            temp_c=cfg.get("demo_temp", 18),
-            high_c=cfg.get("demo_high", 21),
-            low_c=cfg.get("demo_low", 11),
-            condition=cfg.get("demo_condition", "clear"),
+            temp_c=report.temp_c,
+            high_c=report.high_c,
+            low_c=report.low_c,
+            condition=report.condition,
         )
 
     def draw(self, ctx: RenderContext) -> Canvas:

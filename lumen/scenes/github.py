@@ -1,17 +1,21 @@
 """GitHub scene — commit activity / streak.
 
-Real data source (per design): the GitHub REST/GraphQL API. ``fetch`` is a STUB.
-To go live, query the contributions calendar for cfg["username"] and map it into
-``GithubData`` (today's count, current streak, last 7 days).
+Data source: the GitHub GraphQL API (contributions calendar), see
+``lumen.sources.github``. Goes live when both a username (config) and a token
+(config ``token`` or ``GITHUB_TOKEN`` env var) are present; otherwise ``fetch``
+returns demo data so the pipeline runs offline and golden tests stay
+deterministic.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 from ..canvas import Canvas
 from ..registry import register
 from ..scene import RenderContext, Scene
+from ..sources import github as github_api
 
 GH_GREEN = (57, 211, 83)
 
@@ -31,8 +35,14 @@ class GithubScene(Scene):
     transition = "dissolve"
 
     def fetch(self, ctx: RenderContext) -> GithubData:
-        # --- STUB: swap for a GitHub contributions query on cfg["username"] --
-        return GithubData(today=7, streak=23, week=[2, 5, 1, 8, 3, 6, 7])
+        cfg = ctx.config.scene_config(self.id)
+        username = cfg.get("username")
+        token = cfg.get("token") or os.environ.get("GITHUB_TOKEN")
+        if not username or not token:
+            # Demo data: keeps offline runs and golden tests working.
+            return GithubData(today=7, streak=23, week=[2, 5, 1, 8, 3, 6, 7])
+        stats = github_api.fetch_contributions(username, token, today=ctx.now.date())
+        return GithubData(today=stats.today, streak=stats.streak, week=stats.week)
 
     def draw(self, ctx: RenderContext) -> Canvas:
         g: GithubData = ctx.data

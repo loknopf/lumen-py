@@ -9,6 +9,7 @@ dist/
 # Local config and bring-up artifacts
 config.toml
 *.bin
+.env
 # Golden references are committed; their transient actuals are not.
 tests/golden/*.actual.png
 

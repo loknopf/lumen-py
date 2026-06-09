@@ -11,6 +11,7 @@ dependencies = [
     "pillow>=10.0",
     "numpy>=1.26",
     "httpx>=0.27",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -33,3 +34,8 @@ packages = ["lumen"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Live API tests (tests/test_live_api.py) are opt-in: run with `pytest -m live`.
+addopts = '-m "not live"'
+markers = [
+    "live: hits real upstream APIs with local credentials (excluded by default)",
+]
