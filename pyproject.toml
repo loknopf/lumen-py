@@ -29,9 +29,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["lumen"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"lumen/assets" = "lumen/assets"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Live API tests (tests/test_live_api.py) are opt-in: run with `pytest -m live`.
