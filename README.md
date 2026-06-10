@@ -106,6 +106,13 @@ from Open-Meteo (no key needed) once a `location` name or
 file. Without credentials, scenes fall back to built-in demo data (offline
 runs, golden tests).
 
+## Credits
+
+The bitmap fonts in `lumen/assets/fonts/` (`4x6.bdf`, `5x8.bdf`, `6x13.bdf`) are
+from the **Misc Fixed** collection distributed with the
+[X.Org / X Window System](https://www.x.org/) project. Each file carries the
+notice: *"Public domain font. Share and enjoy."*
+
 ## Layout
 
 ```
