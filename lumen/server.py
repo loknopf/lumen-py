@@ -69,7 +69,19 @@ def priority(scene_id: str) -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "scenes": sorted(SCENES), "frame_bytes": FRAME_BYTES}
+    # epoch/tz_offset let the M4 set its RTC from the server instead of an
+    # external time service. astimezone() (not time.timezone) so DST is right.
+    import time
+    from datetime import datetime
+
+    offset = datetime.now().astimezone().utcoffset()
+    return {
+        "ok": True,
+        "scenes": sorted(SCENES),
+        "frame_bytes": FRAME_BYTES,
+        "epoch": int(time.time()),
+        "tz_offset": int(offset.total_seconds()) if offset else 0,
+    }
 
 
 # -- developer preview ------------------------------------------------------

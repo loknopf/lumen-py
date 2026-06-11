@@ -2,7 +2,8 @@
 # Everything here has a sensible default; an empty/absent file still runs.
 
 # Ordered scene rotation the stage manager cycles through.
-rotation = ["weather", "transit", "github", "countdown", "idle"]
+# "clock" is rendered on the device; the server only schedules it.
+rotation = ["weather", "transit", "github", "countdown", "clock", "idle"]
 
 # Optional per-scene duration overrides (seconds). Omitted -> scene default.
 [durations]

@@ -3,6 +3,6 @@
 Add a new scene by dropping a module in here and importing it below.
 """
 
-from . import countdown, github, idle, transit, weather  # noqa: F401
+from . import clock, countdown, github, idle, transit, weather  # noqa: F401
 
-__all__ = ["weather", "transit", "github", "countdown", "idle"]
+__all__ = ["weather", "transit", "github", "countdown", "idle", "clock"]
