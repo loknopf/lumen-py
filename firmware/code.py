@@ -14,7 +14,6 @@ import board
 import rtc
 from adafruit_matrixportal.matrix import Matrix
 from adafruit_matrixportal.network import Network
-
 from api import LumenAPI
 from drivers import ClockScene, RemoteScene
 from stagemanager import StageManager
@@ -62,7 +61,13 @@ display = matrix.display
 display.brightness = BRIGHTNESS
 
 network = Network(status_neopixel=board.NEOPIXEL, debug=False)
-api = SyncingAPI(network, getenv("LUMEN_SERVER", "http://192.168.1.100:8080"))
+api = SyncingAPI(
+    network,
+    getenv("LUMEN_SERVER", "http://192.168.1.100"),
+    getenv("LUMEN_PORT", "8080"),
+    getenv("METRICS_SERVER", None),
+    getenv("METRICS_PORT", None),
+)
 
 print("lumen firmware — server:", api._base)
 

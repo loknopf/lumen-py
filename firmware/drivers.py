@@ -42,13 +42,14 @@ class RemoteScene:
         if n != FRAME_BYTES:
             raise ValueError("frame %s: got %d bytes" % (self.scene_id, n))
         # Wire format is big-endian RGB565. If colors come out wrong on a new
-        # CircuitPython build, flip swap_bytes. (Slow fallback: per-pixel loop
-        # bitmap[i % 64, i // 64] = buf[2i] << 8 | buf[2i+1].)
+        # CircuitPython build, flip swap_bytes_in_element. (Slow fallback:
+        # per-pixel loop bitmap[i % 64, i // 64] = buf[2i] << 8 | buf[2i+1].)
         bitmaptools.readinto(
             self._bitmap,
             io.BytesIO(self._buf),
             bits_per_pixel=16,
-            swap_bytes=True,
+            element_size=2,
+            swap_bytes_in_element=True,
         )
 
     def tick(self, now):
