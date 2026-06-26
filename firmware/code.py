@@ -58,6 +58,7 @@ class SyncingAPI(LumenAPI):
 
 matrix = Matrix()
 display = matrix.display
+display.rotation = int(getenv("LUMEN_ROTATION_DEG", 0))
 display.brightness = BRIGHTNESS
 
 network = Network(status_neopixel=board.NEOPIXEL, debug=False)

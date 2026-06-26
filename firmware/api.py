@@ -11,13 +11,20 @@ import time
 
 class LumenAPI:
     def __init__(
-        self, network, base_url, base_port, metrics_url=None, metrics_port=None
+        self,
+        network,
+        base_url,
+        base_port,
+        metrics_url=None,
+        metrics_port=None,
+        rot=None,
     ):
         self._network = network
         self._base = (base_url + ":" + base_port).rstrip("/")
         self._metric = None
         if metrics_url and metrics_port:
             self._metric = (metrics_url + ":" + metrics_port).rstrip("/")
+        self._rot = "0" if rot is None else rot
 
     def _get_json(self, path):
         start = time.monotonic()
@@ -41,7 +48,9 @@ class LumenAPI:
     def frame_into(self, scene_id, buf):
         """Stream /frame/{id} into buf. Returns total bytes received."""
         start = time.monotonic()
-        resp = self._network.fetch(self._base + "/frame/" + scene_id)
+        resp = self._network.fetch(
+            self._base + "/frame/" + scene_id + "?rot=" + self._rot
+        )
         end = time.monotonic()
         try:
             offset = 0
