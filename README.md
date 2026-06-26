@@ -13,7 +13,7 @@ full system design.
 | Endpoint | Returns |
 |---|---|
 | `GET /next` | `{"id": "weather", "duration": 8, "transition": "fade"}` |
-| `GET /frame/{id}` | 4096 bytes, big-endian RGB565, row-major |
+| `GET /frame/{id}?rot={angle_deg}` | 4096 bytes, big-endian RGB565, row-major |
 | `POST /priority/{id}` | inject a one-shot priority scene |
 | `GET /preview` | dev dashboard: every scene scaled up (auto-refresh) |
 | `GET /health` | liveness + registered scenes |
