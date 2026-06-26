@@ -50,8 +50,8 @@ def current_scene() -> dict:
 
 
 @app.get("/frame/{scene_id}")
-def frame(scene_id: str) -> Response:
-    data = renderer.frame(scene_id)
+def frame(scene_id: str, rot: int) -> Response:
+    data = renderer.frame(scene_id, rot)
     return Response(
         content=data,
         media_type="application/octet-stream",

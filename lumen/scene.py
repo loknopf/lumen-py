@@ -37,6 +37,7 @@ class RenderContext:
     now: datetime
     config: Any  # lumen.config.Config — typed loosely to avoid an import cycle
     data: Any = None  # result of fetch(), populated by the renderer
+    rot: int = 0
 
 
 class Scene(ABC):
@@ -61,4 +62,7 @@ class Scene(ABC):
     def render(self, ctx: RenderContext) -> Canvas:
         if ctx.data is None:
             ctx.data = self.fetch(ctx)
-        return self.draw(ctx)
+        canvas = self.draw(ctx)
+        if ctx.rot:
+            canvas = canvas.rotate(ctx.rot)
+        return canvas
