@@ -27,6 +27,7 @@ from .scene import RenderContext, Scene
 class _CacheEntry:
     data: bytes
     expires_at: float
+    rot: int = 0
 
 
 class FrameRenderer:
@@ -36,8 +37,8 @@ class FrameRenderer:
         self._cache: dict[str, _CacheEntry] = {}
         self._last_good: dict[str, bytes] = {}
 
-    def _render_scene(self, scene: Scene) -> bytes:
-        ctx = RenderContext(now=self._now_fn(), config=self.config)
+    def _render_scene(self, scene: Scene, rot: int) -> bytes:
+        ctx = RenderContext(now=self._now_fn(), config=self.config, rot=rot)
         canvas = scene.render(ctx)
         data = canvas.to_rgb565()
         if len(data) != FRAME_BYTES:
@@ -46,24 +47,28 @@ class FrameRenderer:
             )
         return data
 
-    def frame(self, scene_id: str) -> bytes:
+    def frame(self, scene_id: str, rot: int) -> bytes:
         scene = SCENES.get(scene_id)
         if scene is None:
             return error_frame(f"NO {scene_id}")
 
         entry = self._cache.get(scene_id)
-        if entry is not None and entry.expires_at > time.monotonic():
+        if (
+            entry is not None
+            and entry.rot == rot
+            and entry.expires_at > time.monotonic()
+        ):
             return entry.data
 
         try:
-            data = self._render_scene(scene)
+            data = self._render_scene(scene, rot)
         except Exception as exc:  # noqa: BLE001 - never let a scene break the panel
             import logging
 
             logging.getLogger("lumen").exception("scene %s failed: %s", scene_id, exc)
             return self._last_good.get(scene_id) or error_frame(f"ERR {scene_id}")
 
-        self._cache[scene_id] = _CacheEntry(data, time.monotonic() + scene.ttl)
+        self._cache[scene_id] = _CacheEntry(data, time.monotonic() + scene.ttl, rot)
         self._last_good[scene_id] = data
         return data
 

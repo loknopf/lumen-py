@@ -122,6 +122,24 @@ class Canvas:
             self._image_obj.paste(image.convert("RGB"), (x, y))
         self._px = self._image_obj.load()
 
+    # -- transform ----------------------------------------------------------
+    def rotate(self, degrees: int) -> "Canvas":
+        """Return a new Canvas rotated by *degrees* (counter-clockwise).
+
+        Dimensions are preserved (no expand); for 90/270 the content is
+        rotated in-place within the original bounding box.
+        """
+        if degrees % 360 == 0:
+            c = Canvas(self.width, self.height)
+            c._image_obj = self._image_obj.copy()
+            c._px = c._image_obj.load()
+            return c
+        rotated = self._image_obj.rotate(degrees)
+        c = Canvas(self.width, self.height)
+        c._image_obj = rotated
+        c._px = c._image_obj.load()
+        return c
+
     # -- output -------------------------------------------------------------
     def image(self) -> Image.Image:
         """Return a copy of the underlying RGB image."""

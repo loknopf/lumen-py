@@ -28,6 +28,6 @@ def test_health_lists_clock_placeholder_scene():
 def test_clock_frame_is_servable_like_any_scene():
     # The firmware never fetches it, but the placeholder must still honour
     # the frame protocol (e.g. for /preview and debugging).
-    resp = client.get("/frame/clock")
+    resp = client.get("/frame/clock?rot=0")
     assert resp.status_code == 200
     assert len(resp.content) == FRAME_BYTES

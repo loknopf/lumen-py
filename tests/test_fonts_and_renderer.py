@@ -29,19 +29,19 @@ def test_error_frame_is_valid_length():
 
 def test_renderer_returns_error_frame_for_unknown_scene():
     r = FrameRenderer(Config())
-    assert len(r.frame("nonexistent")) == 4096
+    assert len(r.frame("nonexistent", 0)) == 4096
 
 
 def test_renderer_caches_within_ttl():
     r = FrameRenderer(Config())
-    first = r.frame("weather")
-    second = r.frame("weather")
+    first = r.frame("weather", 0)
+    second = r.frame("weather", 0)
     assert first == second  # served from cache, identical bytes
 
 
 def test_renderer_falls_back_to_last_good_on_failure(monkeypatch):
     r = FrameRenderer(Config())
-    good = r.frame("weather")
+    good = r.frame("weather", 0)
 
     # Force the next render to blow up, then confirm we still get the last good.
     from lumen.registry import SCENES
@@ -51,4 +51,4 @@ def test_renderer_falls_back_to_last_good_on_failure(monkeypatch):
 
     monkeypatch.setattr(SCENES["weather"], "draw", boom)
     r.invalidate("weather")
-    assert r.frame("weather") == good
+    assert r.frame("weather", 0) == good
