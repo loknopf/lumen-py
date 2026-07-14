@@ -81,6 +81,8 @@ def health() -> dict:
         "frame_bytes": FRAME_BYTES,
         "epoch": int(time.time()),
         "tz_offset": int(offset.total_seconds()) if offset else 0,
+        "active_start": config.active_hours.start,
+        "active_end": config.active_hours.end,
     }
 
 
