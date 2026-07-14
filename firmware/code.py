@@ -21,8 +21,9 @@ from drivers import ClockScene, RemoteScene
 from stagemanager import StageManager
 
 BRIGHTNESS = 0.3
-RESYNC_INTERVAL = 600  # re-sync the RTC from the server every 10 minutes
+RESYNC_INTERVAL = 3600  # re-sync the RTC from the server once an hour
 RESYNC_RETRY = 300  # ...but retry sooner after a failed sync
+SLEEP_CHECK_INTERVAL = 60  # re-check active hours independently of RTC resync
 
 def _parse_hhmm(s):
     h, m = s.split(":")
@@ -69,13 +70,16 @@ class SyncingAPI(LumenAPI):
 
     The server reports (epoch_utc, tz_offset, active_start, active_end); adding
     the offset *before* setting the RTC makes time.localtime() local everywhere
-    else on device. After each sync the device checks active_hours and enters
-    deep sleep if the current time falls outside the configured window.
+    else on device. Independently of the resync, active_hours is re-checked
+    every SLEEP_CHECK_INTERVAL so the device reacts promptly to the window
+    boundary rather than waiting for the next (hourly) RTC sync.
     """
 
     _next_sync = 0.0
+    _next_sleep_check = 0.0
     _active_start = "07:00"
     _active_end = "00:00"
+    _synced = False
 
     def sync_time(self):
         epoch, tz_offset, active_start, active_end = self.server_time()
@@ -83,16 +87,22 @@ class SyncingAPI(LumenAPI):
         self._active_start = active_start
         self._active_end = active_end
         self._next_sync = time.monotonic() + RESYNC_INTERVAL
+        self._synced = True
         print("time synced:", time.localtime())
-        _maybe_deep_sleep(self._active_start, self._active_end)
 
     def next(self):
-        if time.monotonic() >= self._next_sync:
+        now = time.monotonic()
+        if now >= self._next_sync:
             try:
                 self.sync_time()
             except Exception as e:  # non-fatal: clock drifts until next try
                 print("time sync failed:", e)
-                self._next_sync = time.monotonic() + RESYNC_RETRY
+                self._next_sync = now + RESYNC_RETRY
+        # Gated on _synced: without a real RTC value yet, localtime() is
+        # meaningless and would risk sleeping on garbage time.
+        if self._synced and now >= self._next_sleep_check:
+            self._next_sleep_check = now + SLEEP_CHECK_INTERVAL
+            _maybe_deep_sleep(self._active_start, self._active_end)
         return super().next()
 
 
