@@ -34,9 +34,14 @@ class LumenAPI:
         return self._get_json("/next")
 
     def server_time(self):
-        """GET /health -> (epoch_utc, tz_offset_seconds)."""
+        """GET /health -> (epoch_utc, tz_offset_seconds, active_start, active_end)."""
         health = self._get_json("/health")
-        return health["epoch"], health["tz_offset"]
+        return (
+            health["epoch"],
+            health["tz_offset"],
+            health.get("active_start", "07:00"),
+            health.get("active_end", "00:00"),
+        )
 
     def frame_into(self, scene_id, buf):
         """Stream /frame/{id} into buf. Returns total bytes received."""
