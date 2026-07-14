@@ -9,14 +9,16 @@
 
 import alarm
 import alarm.time
+import microcontroller
 import time
+import watchdog
 from os import getenv
 
 import board
 import rtc
 from adafruit_matrixportal.matrix import Matrix
 from adafruit_matrixportal.network import Network
-from api import LumenAPI
+from api import FETCH_TIMEOUT, METRIC_TIMEOUT, STREAM_BUDGET, LumenAPI
 from drivers import ClockScene, RemoteScene
 from stagemanager import StageManager
 
@@ -24,6 +26,14 @@ BRIGHTNESS = 0.3
 RESYNC_INTERVAL = 3600  # re-sync the RTC from the server once an hour
 RESYNC_RETRY = 300  # ...but retry sooner after a failed sync
 SLEEP_CHECK_INTERVAL = 60  # re-check active hours independently of RTC resync
+
+# Backstop for hangs api.py's own timeouts can't reach (e.g. a wedged ESP32
+# coprocessor blocking below the Python level) — see design discussion in
+# firmware/README.md. Must exceed the worst-case bounded stall from a single
+# StageManager iteration: next() (FETCH_TIMEOUT + METRIC_TIMEOUT) followed by
+# frame_into() (FETCH_TIMEOUT + STREAM_BUDGET + METRIC_TIMEOUT) both maxing
+# out back to back, plus margin.
+WATCHDOG_TIMEOUT = (2 * FETCH_TIMEOUT) + STREAM_BUDGET + (2 * METRIC_TIMEOUT) + 15
 
 def _parse_hhmm(s):
     h, m = s.split(":")
@@ -122,6 +132,18 @@ api = SyncingAPI(
 
 print("lumen firmware — server:", api._base)
 
-stage = StageManager(api=api, display=display, remote=RemoteScene(api))
+# Enabled only now, after WiFi/display setup — a slow boot (association, DHCP)
+# must not itself trip the watchdog. From here on, anything that wedges the
+# loop past WATCHDOG_TIMEOUT (including below the Python level, e.g. a stuck
+# ESP32 coprocessor) forces a hard reset instead of freezing indefinitely.
+microcontroller.watchdog.timeout = WATCHDOG_TIMEOUT
+microcontroller.watchdog.mode = watchdog.WatchDogMode.RESET
+
+stage = StageManager(
+    api=api,
+    display=display,
+    remote=RemoteScene(api),
+    feed_watchdog=microcontroller.watchdog.feed,
+)
 stage.register_local_scene("clock", ClockScene())
 stage.run()

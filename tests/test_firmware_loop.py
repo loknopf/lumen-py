@@ -159,6 +159,26 @@ def test_failure_keeps_current_scene_and_backs_off():
     assert stage._backoff == BACKOFF_INITIAL
 
 
+def test_watchdog_fed_every_iteration():
+    clock = FakeClock()
+    api = FakeAPI(clock, [{"id": "weather", "duration": 5}])
+    display = FakeDisplay()
+    remote = FakeDriver()
+    feeds = []
+    stage = StageManager(
+        api=api,
+        display=display,
+        remote=remote,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+        feed_watchdog=lambda: feeds.append(clock.t),
+    )
+    stage.run(max_iterations=60)
+
+    # One feed per loop iteration, regardless of whether a fetch/tick ran.
+    assert len(feeds) == 60
+
+
 def test_broken_tick_does_not_kill_the_loop():
     class BrokenDriver(FakeDriver):
         def tick(self, now):
