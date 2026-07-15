@@ -32,6 +32,7 @@ class StageManager:
         remote,
         monotonic=time.monotonic,
         sleep=time.sleep,
+        feed_watchdog=lambda: None,
     ) -> None:
         self._api = api
         self._display = display  # needs only .root_group
@@ -39,6 +40,11 @@ class StageManager:
         self._local_scenes = {}
         self._monotonic = monotonic
         self._sleep = sleep
+        # Backstop for hangs that api.py's own timeouts can't reach (e.g. a
+        # wedged ESP32 coprocessor blocking below the Python level). code.py
+        # wires the real microcontroller.watchdog.feed; tests/CPython get the
+        # no-op default so the loop stays hardware-agnostic.
+        self._feed_watchdog = feed_watchdog
         self._backoff = BACKOFF_INITIAL
         self._driver = None
 
@@ -73,6 +79,7 @@ class StageManager:
             if max_iterations is not None:
                 max_iterations -= 1
 
+            self._feed_watchdog()
             now = self._monotonic()
 
             if now >= deadline:
@@ -81,8 +88,12 @@ class StageManager:
                     next_tick = now  # let the fresh scene tick right away
                 except Exception as ex:  # server/network down: keep current scene
                     print("advance failed:", ex)
-                    deadline = now + self._backoff
+                    retry_in = self._backoff
+                    deadline = now + retry_in
                     self._backoff = min(self._backoff * 2, BACKOFF_MAX)
+                    self._api.log_event("advance_fail", retry_in=retry_in)
+
+            self._feed_watchdog()
 
             if self._driver is not None and now >= next_tick:
                 try:
