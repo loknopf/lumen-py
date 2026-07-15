@@ -88,8 +88,12 @@ class StageManager:
                     next_tick = now  # let the fresh scene tick right away
                 except Exception as ex:  # server/network down: keep current scene
                     print("advance failed:", ex)
-                    deadline = now + self._backoff
+                    retry_in = self._backoff
+                    deadline = now + retry_in
                     self._backoff = min(self._backoff * 2, BACKOFF_MAX)
+                    self._api.log_event("advance_fail", retry_in=retry_in)
+
+            self._feed_watchdog()
 
             if self._driver is not None and now >= next_tick:
                 try:

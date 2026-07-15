@@ -1,4 +1,4 @@
-"""Thin HTTP client for the lumen device protocol.
+"""Thin HTTP client for the lumen device protocol, plus MQTT telemetry.
 
 Every fetch closes its response in a finally block: the ESP32 coprocessor has
 a handful of sockets, and one leaked response after an exception is how the
@@ -7,10 +7,19 @@ firmware runs for an hour and then can't connect anymore.
 Every network call also carries an explicit timeout and must raise rather
 than block forever: StageManager's backoff/retry (stagemanager.py) only
 triggers on a raised exception.
+
+Telemetry (api_timing / device_vitals / resilience_event) is a separate,
+best-effort channel published as InfluxDB line protocol to an MQTT broker —
+it must never be able to stall the display loop, so every telemetry failure
+(including a dead broker connection) is bounded and swallowed here.
 """
 
+import gc
 import json
 import time
+
+import adafruit_minimqtt.adafruit_minimqtt as MQTT
+from adafruit_esp32spi import adafruit_esp32spi_socketpool
 
 FETCH_TIMEOUT = 8  # seconds; bounds /next, /health and the /frame connect+headers phase
 STREAM_BUDGET = 10  # seconds; total time allowed to drain a /frame body
@@ -23,34 +32,84 @@ class LumenAPI:
         network,
         base_url,
         base_port,
-        metrics_url=None,
-        metrics_port=None,
+        mqtt_broker=None,
+        mqtt_port=1883,
+        mqtt_username=None,
+        mqtt_password=None,
+        device_id="matrixportal",
         rot=None,
+        feed_watchdog=lambda: None,
     ):
         self._network = network
         self._base = (base_url + ":" + base_port).rstrip("/")
-        self._metric = None
-        if metrics_url and metrics_port:
-            self._metric = (metrics_url + ":" + metrics_port).rstrip("/")
         self._rot = "0" if rot is None else rot
+        self._device_id = device_id
+        self._topic = "lumen/" + device_id + "/telemetry"
+        self._boot_mono = time.monotonic()
+        # Fed after every blocking network op below, so a genuinely wedged
+        # call (e.g. a stuck ESP32 coprocessor) is still caught by the
+        # hardware watchdog well within its timeout, while a normal slow
+        # call chain (sync + heartbeat + next, or a slow frame stream)
+        # doesn't false-trip it.
+        self._feed_watchdog = feed_watchdog
 
-    def _get_json(self, path):
+        # mqtt_broker is optional: telemetry is a nice-to-have, so a missing
+        # broker config must not stop the device protocol from working.
+        self._mqtt = None
+        if mqtt_broker:
+            pool = adafruit_esp32spi_socketpool.SocketPool(self._network._wifi.esp)
+            self._mqtt = MQTT.MQTT(
+                broker=mqtt_broker,
+                port=mqtt_port,
+                username=mqtt_username,
+                password=mqtt_password,
+                socket_pool=pool,
+                socket_timeout=METRIC_TIMEOUT,
+                connect_retries=1,
+            )
+
+    def _ensure_mqtt(self):
+        if self._mqtt is None:
+            return False
+        if self._mqtt.is_connected():
+            return True
+        try:
+            self._mqtt.connect()
+            return True
+        except Exception as e:  # non-fatal: telemetry is best-effort
+            print("mqtt connect failed:", e)
+            return False
+        finally:
+            self._feed_watchdog()
+
+    def _publish(self, line):
+        if not self._ensure_mqtt():
+            return
+        try:
+            self._mqtt.publish(self._topic, line)
+        except Exception as e:  # non-fatal: telemetry is best-effort
+            print("mqtt publish failed:", e)
+        finally:
+            self._feed_watchdog()
+
+    def _get_json(self, path, endpoint):
         start = time.monotonic()
         resp = self._network.fetch(self._base + path, timeout=FETCH_TIMEOUT)
+        self._feed_watchdog()
         end = time.monotonic()
         try:
             return json.loads(resp.text)
         finally:
             resp.close()
-            self._log_api_timing(end - start)
+            self._log_api_timing(endpoint, end - start)
 
     def next(self):
         """GET /next -> {"id", "duration", "transition"?}"""
-        return self._get_json("/next")
+        return self._get_json("/next", "next")
 
     def server_time(self):
         """GET /health -> (epoch_utc, tz_offset_seconds, active_start, active_end)."""
-        health = self._get_json("/health")
+        health = self._get_json("/health", "health")
         return (
             health["epoch"],
             health["tz_offset"],
@@ -65,6 +124,7 @@ class LumenAPI:
             self._base + "/frame/" + scene_id + "?rot=" + self._rot,
             timeout=FETCH_TIMEOUT,
         )
+        self._feed_watchdog()
         end = time.monotonic()
         try:
             offset = 0
@@ -74,6 +134,7 @@ class LumenAPI:
                 if offset + n <= len(buf):
                     buf[offset : offset + n] = chunk
                 offset += n
+                self._feed_watchdog()
                 # A stall after partial data (headers arrived, body froze) isn't
                 # covered by the fetch() timeout above, which only bounds
                 # connect+headers — bound the whole stream too.
@@ -84,29 +145,48 @@ class LumenAPI:
             return offset
         finally:
             resp.close()
-            self._log_api_timing(end - start)
+            self._log_api_timing("frame", end - start)
 
     def log_measurement(self, data):
-        """Best-effort send of a line-protocol value to telegraf.
+        """Best-effort publish of a pre-formatted line-protocol value."""
+        self._publish(f"{data}")
 
-        Telemetry must never be able to stall the display loop, so failures
-        (including timeouts) are bounded and swallowed here rather than
-        propagating.
+    def log_event(self, event, **fields):
+        """Best-effort publish of a resilience_event line (boot, sync_fail, ...).
+
+        Line protocol requires string field values to be quoted (bare tokens
+        parse as int/float/bool) — numeric fields are written bare, anything
+        else is quoted.
         """
-        if not self._metric:
-            return
-        try:
-            self._network._wifi.requests.post(
-                self._metric + "/telegraf",
-                data=f"{data}",
-                headers={"Content-Type": "text/plain; charset=utf-8"},
-                timeout=METRIC_TIMEOUT,
-            )
-        except Exception as e:  # non-fatal: telemetry is best-effort
-            print("telemetry post failed:", e)
+        parts = ['event="{}"'.format(event)]
+        for k, v in fields.items():
+            if isinstance(v, bool):
+                parts.append("{}={}".format(k, str(v).lower()))
+            elif isinstance(v, (int, float)):
+                parts.append("{}={}".format(k, v))
+            else:
+                parts.append('{}="{}"'.format(k, v))
+        line = "resilience_event,device={} {}".format(self._device_id, ",".join(parts))
+        self._publish(line)
 
-    def _log_api_timing(self, duration):
-        lp = "api_timing,device=matrixportal,endpoint=influxdb duration_ms={:.1f}".format(
-            duration
+    def log_vitals(self):
+        """Best-effort publish of a device_vitals heartbeat line."""
+        try:
+            free_mem = gc.mem_free()
+        except Exception:
+            free_mem = -1
+        try:
+            rssi = self._network._wifi.esp.ap_info.rssi
+        except Exception:
+            rssi = 0
+        uptime = time.monotonic() - self._boot_mono
+        line = "device_vitals,device={} free_mem={},uptime_s={:.1f},wifi_rssi={}".format(
+            self._device_id, free_mem, uptime, rssi
+        )
+        self._publish(line)
+
+    def _log_api_timing(self, endpoint, duration):
+        lp = "api_timing,device={},endpoint={} duration_ms={:.1f}".format(
+            self._device_id, endpoint, duration * 1000
         )
         self.log_measurement(lp)

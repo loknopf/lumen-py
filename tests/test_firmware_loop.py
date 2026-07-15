@@ -61,6 +61,7 @@ class FakeAPI:
         self._clock = clock
         self._script = list(script)
         self.call_times: list[float] = []
+        self.events: list[tuple] = []
 
     def next(self) -> dict:
         self.call_times.append(self._clock.t)
@@ -68,6 +69,9 @@ class FakeAPI:
         if isinstance(item, Exception):
             raise item
         return dict(item)
+
+    def log_event(self, event, **fields) -> None:
+        self.events.append((event, fields))
 
 
 def make_stage(script, local=None):
@@ -157,6 +161,10 @@ def test_failure_keeps_current_scene_and_backs_off():
     assert len(local.ticks) > 10
     # Successful advance reset the backoff for the next failure streak.
     assert stage._backoff == BACKOFF_INITIAL
+
+    # Each failure reported itself as telemetry with the wait time actually used.
+    assert [event for event, _ in api.events] == ["advance_fail"] * 3
+    assert [fields["retry_in"] for _, fields in api.events] == [5, 10, 5]
 
 
 def test_watchdog_fed_every_iteration():
