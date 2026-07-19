@@ -120,6 +120,7 @@ class StageManager:
                         print("advance: reconnecting after", self._consecutive_fails, "failures")
                         try:
                             self._reconnect()
+                            print("reconnect: succeeded")
                         except Exception as rex:  # best-effort: keep retrying advance either way
                             print("reconnect failed:", rex)
 

@@ -73,10 +73,17 @@ class LumenAPI:
 
         Recovery path for the failure mode this module's docstring warns
         about: a leaked/exhausted socket can wedge the co-processor's socket
-        table for HTTP fetches while WiFi association — and MQTT, which
-        holds its own long-lived socket — keeps working. esp.reset() clears
-        that socket table without a full microcontroller reboot.
+        table for HTTP fetches while WiFi association keeps failing.
+
+        MQTT is disconnected *before* the reset to be able to reconnect to the broker
+        after the connection to WiFi has been restored and is not blocked by a stale reference
+        to that (then dead) socket.
         """
+        if self._mqtt is not None:
+            try:
+                self._mqtt.disconnect()
+            except Exception:
+                pass  # best-effort: the registry cleanup is what matters here
         self._network._wifi.esp.reset()
         self._network.connect()
         self._feed_watchdog()
