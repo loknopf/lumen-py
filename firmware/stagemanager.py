@@ -22,6 +22,8 @@ TICK_CAP = 0.1
 
 BACKOFF_INITIAL = 5
 BACKOFF_MAX = 60
+RECONNECT_AFTER = 5  # consecutive advance() failures before trying a network reconnect
+HARD_RESET_AFTER = 10  # consecutive advance() failures before giving up and hard-resetting
 
 
 class StageManager:
@@ -33,6 +35,8 @@ class StageManager:
         monotonic=time.monotonic,
         sleep=time.sleep,
         feed_watchdog=lambda: None,
+        reconnect=lambda: None,
+        hard_reset=lambda: None,
     ) -> None:
         self._api = api
         self._display = display  # needs only .root_group
@@ -45,7 +49,13 @@ class StageManager:
         # wires the real microcontroller.watchdog.feed; tests/CPython get the
         # no-op default so the loop stays hardware-agnostic.
         self._feed_watchdog = feed_watchdog
+        # Escalation path for a *sustained* advance() failure streak, wired to
+        # real hardware by code.py. Kept as injected callables (like
+        # feed_watchdog) so this module stays hardware-agnostic.
+        self._reconnect = reconnect
+        self._hard_reset = hard_reset
         self._backoff = BACKOFF_INITIAL
+        self._consecutive_fails = 0
         self._driver = None
 
     def register_local_scene(self, id: str, scene):
@@ -68,6 +78,7 @@ class StageManager:
         self._display.root_group = driver.group
         self._driver = driver
         self._backoff = BACKOFF_INITIAL
+        self._consecutive_fails = 0
         return self._monotonic() + info.get("duration", 8)
 
     def run(self, max_iterations=None):
@@ -91,7 +102,39 @@ class StageManager:
                     retry_in = self._backoff
                     deadline = now + retry_in
                     self._backoff = min(self._backoff * 2, BACKOFF_MAX)
-                    self._api.log_event("advance_fail", retry_in=retry_in)
+                    self._consecutive_fails += 1
+                    reason = "{}: {}".format(type(ex).__name__, ex)
+                    self._api.log_event(
+                        "advance_fail",
+                        retry_in=retry_in,
+                        reason=reason,
+                        consecutive_fails=self._consecutive_fails,
+                    )
+
+                    # A failure streak that survives several backoff cycles while
+                    # MQTT/telemetry keeps working (see api.py) points at something
+                    # scoped to the fetch path — e.g. a co-processor socket table
+                    # wedged by a leaked response — rather than a dead network.
+                    # Try a lighter-weight reconnect before escalating further.
+                    if self._consecutive_fails == RECONNECT_AFTER:
+                        print("advance: reconnecting after", self._consecutive_fails, "failures")
+                        try:
+                            self._reconnect()
+                        except Exception as rex:  # best-effort: keep retrying advance either way
+                            print("reconnect failed:", rex)
+
+                    # Reconnect didn't help either: give up and force a real reset,
+                    # through a dedicated callback rather than by starving the
+                    # watchdog. That makes this an explicit, telemetered decision
+                    # instead of a side effect of an unrelated timeout firing.
+                    if self._consecutive_fails >= HARD_RESET_AFTER:
+                        print("advance: giving up after", self._consecutive_fails, "failures")
+                        self._api.log_event(
+                            "giving_up",
+                            consecutive_fails=self._consecutive_fails,
+                            reason=reason,
+                        )
+                        self._hard_reset()
 
             self._feed_watchdog()
 
