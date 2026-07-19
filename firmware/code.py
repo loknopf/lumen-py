@@ -189,6 +189,10 @@ stage = StageManager(
     display=display,
     remote=RemoteScene(api),
     feed_watchdog=_feed_watchdog,
+    reconnect=api.reconnect,
+    # Dedicated hard-reset channel for a sustained advance() failure streak —
+    # a deliberate, telemetered reset (stagemanager.py logs "giving_up" first)
+    hard_reset=microcontroller.reset,
 )
 stage.register_local_scene("clock", ClockScene())
 stage.run()

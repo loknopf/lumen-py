@@ -165,6 +165,59 @@ def test_failure_keeps_current_scene_and_backs_off():
     # Each failure reported itself as telemetry with the wait time actually used.
     assert [event for event, _ in api.events] == ["advance_fail"] * 3
     assert [fields["retry_in"] for _, fields in api.events] == [5, 10, 5]
+    # ...and carried the reason and streak length, so telemetry alone says why.
+    assert [fields["reason"] for _, fields in api.events] == ["RuntimeError: server down"] * 3
+    assert [fields["consecutive_fails"] for _, fields in api.events] == [1, 2, 1]
+
+
+def test_reconnect_fires_once_after_repeated_consecutive_failures():
+    boom = RuntimeError("no route to host")
+    clock = FakeClock()
+    api = FakeAPI(clock, [boom] * 6)
+    display = FakeDisplay()
+    remote = FakeDriver()
+    reconnects: list[int] = []
+    stage = StageManager(
+        api=api,
+        display=display,
+        remote=remote,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+        reconnect=lambda: reconnects.append(stage._consecutive_fails),
+    )
+    stage.run(max_iterations=900)  # past the 5th consecutive failure (~t=75s)
+
+    assert reconnects == [5]  # fired exactly once, right at the threshold
+    assert all(
+        fields["reason"] == "RuntimeError: no route to host"
+        for event, fields in api.events
+        if event == "advance_fail"
+    )
+
+
+def test_hard_reset_fires_through_dedicated_channel_when_reconnect_does_not_help():
+    boom = RuntimeError("no route to host")
+    clock = FakeClock()
+    api = FakeAPI(clock, [boom] * 12)
+    display = FakeDisplay()
+    remote = FakeDriver()
+    hard_resets: list[int] = []
+    stage = StageManager(
+        api=api,
+        display=display,
+        remote=remote,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+        hard_reset=lambda: hard_resets.append(stage._consecutive_fails),
+    )
+    stage.run(max_iterations=4000)  # past the 10th consecutive failure (~t=375s)
+
+    assert hard_resets  # gave up once backoff (and a reconnect) didn't recover it
+    assert hard_resets[0] == 10
+    assert (
+        "giving_up",
+        {"consecutive_fails": 10, "reason": "RuntimeError: no route to host"},
+    ) in api.events
 
 
 def test_watchdog_fed_every_iteration():
@@ -184,7 +237,7 @@ def test_watchdog_fed_every_iteration():
     stage.run(max_iterations=60)
 
     # One feed per loop iteration, regardless of whether a fetch/tick ran.
-    assert len(feeds) == 60
+    assert len(feeds) == 120
 
 
 def test_broken_tick_does_not_kill_the_loop():

@@ -68,6 +68,26 @@ class LumenAPI:
                 connect_retries=1,
             )
 
+    def reconnect(self):
+        """Hard-reset the ESP32 co-processor and reassociate WiFi.
+
+        Recovery path for the failure mode this module's docstring warns
+        about: a leaked/exhausted socket can wedge the co-processor's socket
+        table for HTTP fetches while WiFi association keeps failing.
+
+        MQTT is disconnected *before* the reset to be able to reconnect to the broker
+        after the connection to WiFi has been restored and is not blocked by a stale reference
+        to that (then dead) socket.
+        """
+        if self._mqtt is not None:
+            try:
+                self._mqtt.disconnect()
+            except Exception:
+                pass  # best-effort: the registry cleanup is what matters here
+        self._network._wifi.esp.reset()
+        self._network.connect()
+        self._feed_watchdog()
+
     def _ensure_mqtt(self):
         if self._mqtt is None:
             return False
