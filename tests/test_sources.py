@@ -7,9 +7,11 @@ is exercised implicitly through these parsers.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
+from lumen.scenes.status import Service, _select_groups, _services, _timeline, _verdict, _visible
 from lumen.scenes.transit import _stop_entries
+from lumen.sources.gatus import check_state, parse_statuses
 from lumen.sources.github import contribution_stats, parse_calendar
 from lumen.sources.rmv import StopSpec, parse_departures
 from lumen.sources.weather import condition_from_code, parse_report
@@ -272,3 +274,119 @@ def test_weather_parse_report():
     assert report.high_c == 21.0
     assert report.low_c == 11.2
     assert report.condition == "clouds"
+
+
+# -- Gatus status --------------------------------------------------------------
+
+UTC_NOW = datetime(2026, 6, 6, 9, 30, 0, tzinfo=timezone.utc)
+
+
+def _result(success: bool, failed: tuple[str, ...] = (), minutes_ago: int = 0) -> dict:
+    when = UTC_NOW - timedelta(minutes=minutes_ago)
+    conditions = [{"condition": "[STATUS] (200) == 200", "success": True}]
+    conditions += [{"condition": c, "success": False} for c in failed]
+    return {
+        "success": success,
+        "conditionResults": conditions,
+        # Gatus reports nanoseconds.
+        "timestamp": when.strftime("%Y-%m-%dT%H:%M:%S") + ".765430256Z",
+    }
+
+
+def _endpoint(key: str, group: str, name: str, *results: dict) -> dict:
+    return {"key": key, "group": group, "name": name, "results": list(results)}
+
+
+def test_gatus_check_state():
+    assert check_state(_result(True)) == "up"
+    # Slow or a certificate close to expiry: still serving, so only degraded.
+    assert check_state(_result(False, ("[RESPONSE_TIME] (2100) < 1500",))) == "deg"
+    assert check_state(_result(False, ("[CERTIFICATE_EXPIRATION] (100h) > 168h",))) == "deg"
+    assert check_state(_result(False, ("[STATUS] (502) == 200", "[RESPONSE_TIME] (9) < 1500"))) == "down"
+    assert check_state({"success": False, "conditionResults": []}) == "down"
+
+
+def test_gatus_parse_sorts_checks_and_reads_latest_state():
+    [ep] = parse_statuses(
+        [
+            _endpoint(
+                "services_n8n", "Services", "n8n",
+                _result(False, ("[STATUS] (502) == 200",), minutes_ago=0),
+                _result(True, minutes_ago=1),
+            )
+        ]
+    )
+    assert ep.key == "services_n8n"
+    assert [c.state for c in ep.checks] == ["up", "down"]  # oldest first
+    assert ep.checks[-1].when == UTC_NOW.replace(microsecond=765430)
+    assert ep.state == "down"
+
+
+def test_gatus_endpoint_without_results_is_none():
+    [ep] = parse_statuses([_endpoint("public_site", "Public", "Site")])
+    assert ep.state == "none"
+
+
+def test_status_groups_fold_and_labels():
+    endpoints = parse_statuses(
+        [
+            _endpoint("certificates_a", "Certificates", "a.example", _result(True)),
+            _endpoint("certificates_b", "Certificates", "b.example",
+                      _result(False, ("[CERTIFICATE_EXPIRATION] (1h) > 168h",))),
+            _endpoint("infrastructure_reverse-proxy", "Infrastructure", "Reverse proxy", _result(True)),
+            _endpoint("public_portfolio", "Public", "Portfolio", _result(True)),
+            _endpoint("internal_db", "Internal", "Database", _result(True)),
+        ]
+    )
+    endpoints = _select_groups(endpoints, ["Public", "Infrastructure", "Certificates"])
+    services = _services(endpoints, {"Certificates": "tls"}, {"public_portfolio": "Site"})
+    assert services == [
+        Service("SITE", "up"),
+        Service("REVERSE PROXY", "up"),
+        Service("TLS", "deg"),  # worst of the folded group
+    ]
+
+
+def test_status_timeline_holds_last_check_and_marks_missing_history():
+    [ep] = parse_statuses(
+        [
+            _endpoint(
+                "services_n8n", "Services", "n8n",
+                _result(True, minutes_ago=10),
+                _result(False, ("[STATUS] (502) == 200",), minutes_ago=4),
+                _result(True, minutes_ago=2),
+            )
+        ]
+    )
+    timeline = _timeline([ep], UTC_NOW)
+    assert len(timeline) == 64
+    # Each column is the state at the end of that minute; the checks land
+    # just after the minute marks, so each shows up one column later.
+    assert set(timeline[:-10]) == {"none"}  # before the first check
+    assert timeline[-10:] == ["up"] * 6 + ["down"] * 2 + ["up"] * 2
+
+
+def test_status_verdict():
+    assert _verdict(["up", "up"]) == ("ALL OK", (57, 211, 83))
+    assert _verdict(["up", "deg", "deg"])[0] == "2 WARN"
+    assert _verdict(["deg", "down", "up"])[0] == "1 DOWN"  # down outranks deg
+    assert _verdict(["none"])[0] == "...."
+
+
+def test_status_overflow_keeps_unhealthy_services_in_order():
+    services = [Service(f"S{i}", "up") for i in range(10)]
+    services[9].state = "down"
+    visible = _visible(services)
+    assert len(visible) == 8
+    assert visible[-1].label == "S9"
+    assert [s.label for s in visible[:7]] == [f"S{i}" for i in range(7)]
+
+
+def test_status_scene_demo_renders_without_config():
+    from lumen import FRAME_BYTES
+    from lumen.config import Config
+    from lumen.scene import RenderContext
+    from lumen.scenes.status import StatusScene
+
+    frame = StatusScene().render(RenderContext(now=NOW, config=Config())).to_rgb565()
+    assert len(frame) == FRAME_BYTES

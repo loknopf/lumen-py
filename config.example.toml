@@ -3,7 +3,7 @@
 
 # Ordered scene rotation the stage manager cycles through.
 # "clock" is rendered on the device; the server only schedules it.
-rotation = ["weather", "transit", "github", "countdown", "clock", "idle"]
+rotation = ["weather", "transit", "github", "status", "countdown", "clock", "idle"]
 
 # Optional per-scene duration overrides (seconds). Omitted -> scene default.
 [durations]
@@ -49,6 +49,15 @@ mode = "compact"         # "full" (default): 3 rows with destination text;
 [scenes.github]
 username = "loknopf"
 # token = "ghp_..."        # GitHub token (no scopes needed); or set GITHUB_TOKEN
+
+[scenes.status]
+url = "https://status.loknopf.dev"   # Gatus status page (public API, no key)
+# Groups to show, in this order (default: every group, API order).
+groups = ["Public", "Services", "Infrastructure", "Certificates"]
+# Collapse a group into a single tile; the worst state in it wins.
+fold = { Certificates = "TLS" }
+# Short labels per endpoint key (7 characters fit); default: the endpoint name.
+labels = { public_portfolio = "Site", public_excalidraw = "Draw", services_nextcloud = "Cloud", "infrastructure_reverse-proxy" = "Proxy" }
 
 [scenes.countdown]
 target = "2026-08-15"

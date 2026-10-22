@@ -102,7 +102,11 @@ queries the GitHub GraphQL
 contributions calendar once `username` plus a token (`token` in config or the
 `GITHUB_TOKEN` env var) are set. The weather scene fetches current conditions
 from Open-Meteo (no key needed) once a `location` name or
-`latitude`/`longitude` are set. Credentials can also live in a local `.env`
+`latitude`/`longitude` are set. The status scene shows service health from a
+[Gatus](https://github.com/TwiN/gatus) status page (public API, no key) once
+its `url` is set: an overall verdict, a one-pixel timeline of the last hour and
+a grid of up to eight services, with optional `groups`, `fold` and `labels`
+settings to pick, merge and shorten them. Credentials can also live in a local `.env`
 file. Without credentials, scenes fall back to built-in demo data (offline
 runs, golden tests).
 
@@ -127,7 +131,7 @@ lumen/
   config.py          TOML config (pydantic)
   server.py          FastAPI app + /preview
   scenes/            one module per scene
-  sources/           API access layer (GitHub GraphQL, RMV HAFAS, Open-Meteo)
+  sources/           API access layer (GitHub GraphQL, RMV HAFAS, Open-Meteo, Gatus)
   assets/fonts/      vendored public-domain BDF fonts
 tests/               unit + golden tests
 tools/               update_golden, dump_frame
